@@ -1,6 +1,7 @@
 package com.gathin.tvhome;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
@@ -11,6 +12,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
+import android.net.Uri;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -82,6 +84,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean glassShown;
     private int lastFocused = 0;
     private float density;
+    private boolean artMode;
+    private int consumedArtKey = -1;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable minuteTick = new Runnable() {
@@ -102,6 +106,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         liveTvPkg = getString(R.string.live_tv_package).trim();
 
         root = findViewById(R.id.root);
+        root.setFocusableInTouchMode(true);
+        applyWallpaper();
         glass = findViewById(R.id.glass);
         ambient = findViewById(R.id.ambient);
         heroName = findViewById(R.id.heroName);
@@ -142,6 +148,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             s.setSpring(new SpringForce().setStiffness(260f).setDampingRatio(0.58f));
         }
 
+        View btnWallpaper = findViewById(R.id.btnWallpaper);
+        btnWallpaper.setOnClickListener(v -> showWallpaperPicker());
         View btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
@@ -152,10 +160,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // jump to a tile far below when there is nothing in that direction.
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v.getId() == R.id.btnInputs) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                if (event.getRepeatCount() == 0) setArtMode(true, true);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v.getId() == R.id.btnWallpaper) return true;
             return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnSettings;
         };
+        btnWallpaper.setOnKeyListener(pillKeys);
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
@@ -193,6 +205,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     protected void onPause() {
+        if (artMode) setArtMode(false, false);
+        consumedArtKey = -1;
         super.onPause();
         handler.removeCallbacks(minuteTick);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
@@ -200,7 +214,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onBackPressed() {
-        // Home screen: Back goes nowhere.
+        if (artMode) {
+            setArtMode(false, true);
+            focusTile(lastFocused);
+        }
     }
 
     // ---- glass highlight -------------------------------------------------------------------------
@@ -303,7 +320,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int count = adapter.getItemCount();
         int target;
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
+            if (position < COLUMNS) {
+                setArtMode(true, true);
+                return true;
+            }
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
@@ -311,6 +331,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             target = Math.min(position + COLUMNS, count - 1);
         }
         focusTile(target);
+        return true;
+    }
+
+    @Override
+    public boolean onTileHorizontalKey(int position, int keyCode) {
+        int column = position % COLUMNS;
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (column == 0) return true;
+            focusTile(position - 1);
+        } else {
+            if (column == COLUMNS - 1 || position + 1 >= adapter.getItemCount()) return true;
+            focusTile(position + 1);
+        }
         return true;
     }
 
@@ -322,18 +355,147 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             vh.itemView.findViewById(R.id.card).requestFocus();
             return;
         }
-        // Not laid out yet: scroll there, then focus once the scroll settles.
-        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
-                if (newState != RecyclerView.SCROLL_STATE_IDLE) return;
-                rv.removeOnScrollListener(this);
-                RecyclerView.ViewHolder h = rv.findViewHolderForAdapterPosition(pos);
-                View target = h != null ? h.itemView.findViewById(R.id.card) : rv.getChildAt(0);
-                if (target != null) target.requestFocus();
+        // Wait for the target row to attach. A scroll listener can miss the
+        // SCROLL_STATE_IDLE transition when the requested item is already in view.
+        RecyclerView.OnChildAttachStateChangeListener attachListener = new RecyclerView.OnChildAttachStateChangeListener() {
+            @Override public void onChildViewAttachedToWindow(@NonNull View view) {
+                if (grid.getChildAdapterPosition(view) != pos) return;
+                grid.removeOnChildAttachStateChangeListener(this);
+                view.findViewById(R.id.card).requestFocus();
             }
+
+            @Override public void onChildViewDetachedFromWindow(@NonNull View view) {}
+        };
+        grid.addOnChildAttachStateChangeListener(attachListener);
+        grid.scrollToPosition(pos);
+        grid.post(() -> {
+            RecyclerView.ViewHolder attached = grid.findViewHolderForAdapterPosition(pos);
+            if (attached == null) return;
+            grid.removeOnChildAttachStateChangeListener(attachListener);
+            attached.itemView.findViewById(R.id.card).requestFocus();
         });
-        grid.smoothScrollToPosition(pos);
+    }
+
+    /** A short transition only: the artwork has no animation or frame loop. */
+    private void setArtMode(boolean show, boolean animate) {
+        artMode = show;
+        grid.stopScroll();
+        View topBar = findViewById(R.id.topBar);
+        View shade = findViewById(R.id.wallpaperShade);
+        grid.animate().cancel();
+        topBar.animate().cancel();
+        shade.animate().cancel();
+        grid.setDescendantFocusability(show ? ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                : ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        ((ViewGroup) topBar).setDescendantFocusability(show ? ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                : ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        grid.setImportantForAccessibility(show ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        topBar.setImportantForAccessibility(show ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        if (show) {
+            root.requestFocus();
+            hideGlass();
+        }
+        // Leave a small strip of the dock visible at the bottom as a return affordance.
+        float offset = show ? Math.max(0, root.getHeight() - grid.getTop()
+                - ((View) grid.getParent()).getTop() - 64 * density) : 0;
+        if (animate) {
+            grid.animate().translationY(offset).setDuration(220).start();
+            topBar.animate().alpha(show ? 0f : 1f).setDuration(180).start();
+            shade.animate().alpha(show ? 0f : 1f).setDuration(180).start();
+        } else {
+            grid.setTranslationY(offset);
+            topBar.setAlpha(show ? 0f : 1f);
+            shade.setAlpha(show ? 0f : 1f);
+        }
+    }
+
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        int key = event.getKeyCode();
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            String shortcutPackage = shortcutPackageForKey(key, event.getScanCode());
+            if (shortcutPackage != null) {
+                setArtMode(false, true);
+                openShortcut(shortcutPackage);
+                return true;
+            }
+            // Channel +/- buttons should work from the launcher too. Opening the tuner
+            // keeps them useful even when the home screen currently has focus.
+            if (key == KeyEvent.KEYCODE_CHANNEL_UP || key == KeyEvent.KEYCODE_CHANNEL_DOWN) {
+                setArtMode(false, true);
+                openLiveTv();
+                return true;
+            }
+        }
+        // Many TV remotes send KEYCODE_TV for their dedicated Live TV button.
+        // The launcher must handle it explicitly; otherwise it is swallowed here
+        // instead of reaching TCL's TV app (which may restore the last HDMI input).
+        if ((key == KeyEvent.KEYCODE_TV || key == KeyEvent.KEYCODE_TV_INPUT
+                || key == KeyEvent.KEYCODE_GUIDE || event.getScanCode() == 365)
+                && event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            setArtMode(false, true);
+            openLiveTv();
+            return true;
+        }
+        if (key == consumedArtKey) {
+            if (event.getAction() == KeyEvent.ACTION_UP) consumedArtKey = -1;
+            return true;
+        }
+        if (artMode && (key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN
+                || key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT
+                || key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER
+                || key == KeyEvent.KEYCODE_BACK)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0
+                    && key != KeyEvent.KEYCODE_DPAD_LEFT && key != KeyEvent.KEYCODE_DPAD_RIGHT) {
+                consumedArtKey = key;
+                setArtMode(false, true);
+                if (key == KeyEvent.KEYCODE_DPAD_UP) findViewById(R.id.btnWallpaper).requestFocus();
+                else focusTile(lastFocused);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    /** TCL exposes several dedicated remote buttons as vendor scan codes on this C6K. */
+    private String shortcutPackageForKey(int key, int scanCode) {
+        // Observed on the physical IR receiver; the translated Android key codes are
+        // vendor-specific and differ between firmware builds, while scan codes remain stable.
+        if (scanCode == 566) return "com.netflix.ninja";
+        if (scanCode == 752) return "com.amazon.amazonvideo.livingroom";
+        if (scanCode == 569) return "com.google.android.youtube.tv";
+        switch (key) {
+            case KeyEvent.KEYCODE_TV_SATELLITE_CS: return "com.google.android.youtube.tv";
+            case KeyEvent.KEYCODE_F1: return "com.netflix.ninja";
+            case KeyEvent.KEYCODE_F2: return "com.amazon.amazonvideo.livingroom";
+            case KeyEvent.KEYCODE_F3: return "com.google.android.youtube.tv";
+            case KeyEvent.KEYCODE_F4: return "com.globo.globotv";
+            case KeyEvent.KEYCODE_F5: return "com.tcl.channelplus";
+            case KeyEvent.KEYCODE_F6: return "com.disney.disneyplus";
+            default: return null;
+        }
+    }
+
+    private void openShortcut(String packageName) {
+        Intent intent;
+        if ("com.tcl.channelplus".equals(packageName)) {
+            // TCL Channel is a deep-link app on this firmware, without a launcher activity.
+            intent = new Intent(Intent.ACTION_VIEW, Uri.parse("app://com.tcl.iptv/tune"));
+            intent.setPackage(packageName);
+        } else {
+            intent = getPackageManager().getLeanbackLaunchIntentForPackage(packageName);
+        }
+        if (intent == null) {
+            Toast.makeText(this, getString(R.string.shortcut_app_unavailable), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException | SecurityException e) {
+            Toast.makeText(this, getString(R.string.shortcut_app_unavailable), Toast.LENGTH_SHORT).show();
+        }
     }
 
     // ---- top bar ---------------------------------------------------------------------------------
@@ -377,12 +539,48 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnWifi.setText(text);
     }
 
+    private static final int[] WALLPAPERS = {0, R.drawable.wallpaper_wave, R.drawable.wallpaper_van_gogh};
+
+    private int wallpaperChoice() {
+        int choice = getPreferences(MODE_PRIVATE).getInt("wallpaper", 1);
+        if (choice > 0 && choice < WALLPAPERS.length) return choice;
+        getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", 1).apply();
+        return 1;
+    }
+
+    private void applyWallpaper() {
+        int choice = wallpaperChoice();
+        ImageView wallpaper = findViewById(R.id.wallpaper);
+        wallpaper.setImageResource(WALLPAPERS[choice]);
+        wallpaper.setVisibility(choice == 0 ? View.GONE : View.VISIBLE);
+        View shade = findViewById(R.id.wallpaperShade);
+        shade.setVisibility(choice == 0 ? View.GONE : View.VISIBLE);
+    }
+
+    private void showWallpaperPicker() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.wallpaper_title)
+                .setSingleChoiceItems(R.array.wallpaper_choices, wallpaperChoice() - 1, (dialog, which) -> {
+                    getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", which + 1).apply();
+                    applyWallpaper();
+                    dialog.dismiss();
+                })
+                .setNegativeButton(R.string.close, null)
+                .show();
+    }
+
     private void open(Intent i) {
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(i);
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "Not available on this TV", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openLiveTv() {
+        if (!LiveTv.open(this)) {
+            Toast.makeText(this, R.string.no_live_tuner, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -426,10 +624,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                                 TvContract.buildChannelUriForPassthroughInput(id), "vnd.android.cursor.item/channel")));
             }
         }
-        Intent liveTv = liveTvPkg.isEmpty() ? null : getPackageManager().getLeanbackLaunchIntentForPackage(liveTvPkg);
-        if (liveTv != null) {
+        String tunerInputId = LiveTv.findTunerInputId(this);
+        Intent liveTv = tunerInputId == null && !liveTvPkg.isEmpty()
+                ? getPackageManager().getLeanbackLaunchIntentForPackage(liveTvPkg) : null;
+        if (tunerInputId != null || liveTv != null) {
             if (rows.getChildCount() > 0) addSeparator(rows);
-            addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1, () -> open(liveTv));
+            addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1,
+                    () -> {
+                        if (tunerInputId != null) {
+                            LiveTv.open(this);
+                        } else {
+                            open(liveTv);
+                        }
+                    });
         }
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();

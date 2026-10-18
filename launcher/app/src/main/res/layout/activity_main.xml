@@ -5,6 +5,18 @@
     android:layout_height="match_parent"
     android:background="@drawable/home_background">
 
+    <ImageView
+        android:id="@+id/wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+    <View
+        android:id="@+id/wallpaperShade"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/wallpaper_shade" />
+
     <View android:id="@+id/ambient" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" />
     <TextView android:id="@+id/heroName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone" />
     <TextView android:id="@+id/greeting" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone" />
@@ -13,12 +25,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:paddingStart="40dp"
         android:paddingEnd="40dp"
         android:paddingTop="24dp"
         android:paddingBottom="24dp">
 
-        <FrameLayout android:layout_width="match_parent" android:layout_height="34dp">
+        <FrameLayout android:id="@+id/topBar" android:layout_width="match_parent" android:layout_height="34dp">
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
@@ -50,6 +64,7 @@
                 android:layout_height="match_parent"
                 android:layout_gravity="end"
                 android:orientation="horizontal">
+                <TextView android:id="@+id/btnWallpaper" style="@style/TopButton" android:text="@string/wallpaper" android:nextFocusDown="@+id/grid" />
                 <TextView android:id="@+id/btnInputs" style="@style/TopButton" android:text="@string/inputs" android:drawableStart="@drawable/ic_input" android:nextFocusDown="@+id/grid" />
                 <TextView android:id="@+id/btnWifi" style="@style/TopButton" android:text="@string/wifi" android:drawableStart="@drawable/ic_wifi" android:nextFocusDown="@+id/grid" />
                 <TextView android:id="@+id/btnSettings" style="@style/TopButton" android:text="@string/settings" android:drawableStart="@drawable/ic_settings" android:nextFocusDown="@+id/grid" />

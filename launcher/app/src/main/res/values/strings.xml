@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Home</string>
+    <string name="remote_shortcut_service">YouTube remote shortcut</string>
     <string name="inputs">Inputs</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Settings</string>
@@ -10,6 +11,8 @@
     <string name="not_connected">No device</string>
     <string name="live_tv">Live TV</string>
     <string name="no_inputs">No inputs found</string>
+    <string name="no_live_tuner">Live TV tuner is unavailable</string>
+    <string name="shortcut_app_unavailable">This app is not installed or unavailable</string>
     <string name="unnamed_input">Other input</string>
     <string name="good_morning">Good morning</string>
     <string name="good_afternoon">Good afternoon</string>
@@ -17,4 +20,11 @@
     <string name="good_night">Good night</string>
     <string name="ethernet">Ethernet</string>
     <string name="offline">Offline</string>
+    <string name="wallpaper">Wallpaper</string>
+    <string name="wallpaper_title">Choose wallpaper</string>
+    <string name="close">Close</string>
+    <string-array name="wallpaper_choices">
+        <item>Hokusai — The Great Wave</item>
+        <item>Van Gogh — Wheat Field with Cypresses</item>
+    </string-array>
 </resources>

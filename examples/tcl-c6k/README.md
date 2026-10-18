@@ -8,7 +8,7 @@ Dock, from left to right: YouTube, Stremio, YouCine, SportzX, Netflix, Prime Vid
 Apps to preserve: YouTube, Stremio, Netflix, Globoplay, Prime Video, HBO Max, SportzX, and YouCine.
 Configuration: `launcher/app/src/main/res/values/config.xml`.
 Launcher labels and dates use English, including when the system language is Portuguese.
-The compact layout uses seven columns, a fixed blue background, and a dock in the lower half,
+The compact layout uses seven columns, a selectable art background, and a dock in the lower half,
 leaving the upper area open for a wallpaper. Large headings and dynamic glow are disabled.
 Live TV, PS5 (when its CEC input is present and not disconnected), Globoplay, and Play Store appear in the second row.
 The PS5 shortcut opens HDMI 1; its observed input ID is configured in `ps5_input_id` and should be updated if the console changes ports.
@@ -65,5 +65,16 @@ The inventory may contain device identifiers and network details; keep it local.
 ## Change the appearance
 
 To change the dock order, edit `dock_apps` in the configuration file and rebuild.
-The blue background is defined in `launcher/app/src/main/res/drawable/home_background.xml`;
-the interface does not include a wallpaper picker.
+Use **Wallpaper** in the top bar to choose Hokusai's *The Great Wave* or
+Van Gogh's *Wheat Field with Cypresses*. Both paintings are bundled locally and static.
+The choice is saved; old animated or blue background selections migrate to Hokusai.
+Artwork credits and source links are in `launcher/WALLPAPER-CREDITS.md`.
+
+Press **Up** from the first app row to view the painting: the dock slides to the bottom
+edge and the top bar and shading fade away. **Down**, **OK**, or **Back** restores the
+apps and the previous selection without launching an app. Press **Up** again to reach
+the top controls (Wallpaper, Inputs, Network, Settings). Only the brief transition is
+animated; there is no continuous wallpaper animation.
+
+This interaction is inspired by Apple's full-screen Top Shelf preview:
+https://support.apple.com/guide/tv/navigate-apple-tv-4k-atvbe55a4b4e/tvos

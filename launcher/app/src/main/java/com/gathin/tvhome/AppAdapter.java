@@ -51,6 +51,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
         /** Called for D-pad Up/Down on a tile. Return true when handled. */
         boolean onTileVerticalKey(int position, int keyCode);
+
+        /** Called for D-pad Left/Right on a tile. Return true when handled. */
+        boolean onTileHorizontalKey(int position, int keyCode);
     }
 
     static final class Entry {
@@ -60,23 +63,26 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         final Drawable banner;
         final Drawable icon;
         final String inputId;
+        final boolean liveTvInput;
         int ambient;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
             this.inputId = null;
+            this.liveTvInput = false;
             this.label = label;
             this.component = component;
             this.pkg = component.getPackageName();
             this.banner = banner;
             this.icon = icon;
         }
-        Entry(String inputId, Drawable icon) {
-            this.label = "PS5";
+        Entry(String inputId, String label, Drawable icon, boolean liveTvInput) {
+            this.label = label;
             this.component = null;
             this.pkg = "";
             this.banner = null;
             this.icon = icon;
             this.inputId = inputId;
+            this.liveTvInput = liveTvInput;
         }
     }
 
@@ -105,6 +111,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         List<ResolveInfo> found = pm.queryIntentActivities(probe, 0);
         List<Entry> fresh = new ArrayList<>();
         String liveTvPkg = ctx.getString(R.string.live_tv_package).trim();
+        String tunerInputId = LiveTv.findTunerInputId(ctx);
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
@@ -113,6 +120,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             if (banner == null) banner = ri.activityInfo.applicationInfo.loadBanner(pm);
             Drawable icon = ri.loadIcon(pm);
             boolean liveTv = pkg.equals(liveTvPkg);
+            if (liveTv && tunerInputId != null) continue;
             if (liveTv) banner = null;
             if (liveTv) icon = ctx.getDrawable(R.drawable.ic_livetv);
             String label = liveTv ? ctx.getString(R.string.live_tv) : String.valueOf(ri.loadLabel(pm));
@@ -127,6 +135,11 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             }
             return a.label.compareToIgnoreCase(b.label);
         });
+        if (tunerInputId != null) {
+            fresh.add(Math.min(dockSize, fresh.size()),
+                    new Entry(tunerInputId, ctx.getString(R.string.live_tv),
+                            ctx.getDrawable(R.drawable.ic_livetv), true));
+        }
         TvInputManager inputs = (TvInputManager) ctx.getSystemService(Context.TV_INPUT_SERVICE);
         if (inputs != null) {
             String configuredId = ctx.getString(R.string.ps5_input_id);
@@ -136,11 +149,11 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 boolean ps5 = input.getId().equals(configuredId)
                         || label.contains("playstation 5") || label.contains("ps5");
                 if (!ps5 || inputs.getInputState(input.getId()) == TvInputManager.INPUT_STATE_DISCONNECTED) continue;
-                int insert = Math.min(dockSize, fresh.size());
+                int insert = Math.min(dockSize + (tunerInputId != null ? 1 : 0), fresh.size());
                 for (int n = 0; n < fresh.size(); n++) {
-                    if (fresh.get(n).pkg.equals(liveTvPkg)) { insert = n + 1; break; }
+                    if (fresh.get(n).liveTvInput || fresh.get(n).pkg.equals(liveTvPkg)) { insert = n + 1; break; }
                 }
-                fresh.add(insert, new Entry(input.getId(), ctx.getDrawable(R.drawable.ic_gamepad)));
+                fresh.add(insert, new Entry(input.getId(), "PS5", ctx.getDrawable(R.drawable.ic_gamepad), false));
                 break;
             }
         }
@@ -149,7 +162,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         for (int n = 0; unchanged && n < fresh.size(); n++) {
             Entry a = fresh.get(n), b = items.get(n);
             unchanged = Objects.equals(a.component, b.component)
-                    && Objects.equals(a.inputId, b.inputId) && a.label.equals(b.label);
+                    && Objects.equals(a.inputId, b.inputId) && a.liveTvInput == b.liveTvInput
+                    && a.label.equals(b.label);
         }
         if (unchanged) return;
         items.clear();
@@ -173,11 +187,11 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         h.card.setScaleX(1f);
         h.card.setScaleY(1f);
         boolean liveTv = e.pkg.equals(ctx.getString(R.string.live_tv_package).trim());
-        boolean ps5 = e.inputId != null;
+        boolean ps5 = e.inputId != null && !e.liveTvInput;
         boolean sportzx = e.pkg.equals("com.sportzx.live");
         h.card.setContentDescription(e.label);
         h.card.setBackgroundResource(ps5 ? R.drawable.tile_ps5
-                : liveTv ? R.drawable.tile_live_tv
+                : liveTv || e.liveTvInput ? R.drawable.tile_live_tv
                 : sportzx ? R.drawable.tile_sportzx : R.drawable.tile_bg);
         h.icon.setImageTintList(ColorStateList.valueOf(ps5 ? 0xFF172D47 : Color.WHITE));
         h.label.setTextColor(ps5 ? 0xFF172D47 : Color.WHITE);
@@ -211,6 +225,12 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     private void launch(Entry e) {
+        if (e.liveTvInput) {
+            if (!LiveTv.open(ctx)) {
+                Toast.makeText(ctx, "Can't open Live TV", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
         Intent i = e.inputId != null
                 ? new Intent(Intent.ACTION_VIEW).setDataAndType(
                         TvContract.buildChannelUriForPassthroughInput(e.inputId),
@@ -313,9 +333,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
             card.setOnKeyListener((view, keyCode, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
                 int pos = getBindingAdapterPosition();
-                return listener != null && pos != RecyclerView.NO_POSITION && listener.onTileVerticalKey(pos, keyCode);
+                if (listener == null || pos == RecyclerView.NO_POSITION) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    return listener.onTileVerticalKey(pos, keyCode);
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    return listener.onTileHorizontalKey(pos, keyCode);
+                }
+                return false;
             });
 
             card.setOnFocusChangeListener((view, focused) -> {
