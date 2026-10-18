@@ -1,69 +1,69 @@
-# TCL C6K — configuração pessoal
+# TCL C6K — personal setup
 
-TV identificada por ADB como TCL G08 / Smart TV Pro, Android 14 (SDK 34).
-Launcher original: `com.google.android.apps.tv.launcherx/.home.HomeActivity`.
-TV ao vivo: `com.tcl.tv`.
+ADB identifies this TV as TCL G08 / Smart TV Pro, running Android 14 (SDK 34).
+Original launcher: `com.google.android.apps.tv.launcherx/.home.HomeActivity`.
+Live TV: `com.tcl.tv`.
 
-Dock, da esquerda para a direita: YouTube, Stremio, YouCine, SportzX, Netflix, Prime Video e HBO Max.
-Aplicativos a preservar: YouTube, Stremio, Netflix, Globoplay, Prime Video, HBO Max, SportzX e YouCine.
-Configuração em `launcher/app/src/main/res/values/config.xml`.
-Os textos acompanham o idioma do sistema; há tradução para português.
-Visual compacto: sete colunas, fundo azul fixo, dock na metade inferior, área superior livre para wallpaper e sem título grande ou brilho dinâmico.
-TV ao vivo, PS5 (quando a entrada CEC está presente e não desconectada), Globoplay e Play Store ficam na segunda linha.
-O PS5 abre a HDMI 1; o ID observado está em `ps5_input_id` e deve ser atualizado se o console mudar de porta.
-A data e a hora ficam à esquerda; Entradas, rede e Configurações ficam à direita. Os outros atalhos estão apenas
-ocultos em `hidden_apps`; seus aplicativos e serviços continuam instalados e habilitados.
+Dock, from left to right: YouTube, Stremio, YouCine, SportzX, Netflix, Prime Video, and HBO Max.
+Apps to preserve: YouTube, Stremio, Netflix, Globoplay, Prime Video, HBO Max, SportzX, and YouCine.
+Configuration: `launcher/app/src/main/res/values/config.xml`.
+Launcher labels and dates use English, including when the system language is Portuguese.
+The compact layout uses seven columns, a fixed blue background, and a dock in the lower half,
+leaving the upper area open for a wallpaper. Large headings and dynamic glow are disabled.
+Live TV, PS5 (when its CEC input is present and not disconnected), Globoplay, and Play Store appear in the second row.
+The PS5 shortcut opens HDMI 1; its observed input ID is configured in `ps5_input_id` and should be updated if the console changes ports.
+Date and time are on the left; Inputs, network, and Settings are on the right.
+Other shortcuts are only hidden through `hidden_apps`; their apps and services remain installed and enabled.
 
-## Instalação
+## Installation
 
-Com o ambiente Python descrito no README principal, JDK 17, Android SDK 34 e
-build-tools 34.0.0, execute a partir da raiz do repositório:
+With the Python environment described in the main README, JDK 17, Android SDK 34, and
+build-tools 34.0.0, run these commands from the repository root:
 
 ```bash
 export TV_HOST=192.168.5.162
-export JAVA_HOME=/caminho/para/jdk17/Contents/Home
-export ANDROID_HOME=/caminho/para/android-sdk
+export JAVA_HOME=/path/to/jdk17/Contents/Home
+export ANDROID_HOME=/path/to/android-sdk
 bash examples/tcl-c6k/install.sh
 ```
 
-O script compila, verifica a transferência e a instalação, abre o launcher e
-confere a resolução da tela inicial. Se o firmware continuar priorizando o Google TV,
-desativa `com.google.android.apps.tv.launcherx` e
-`com.google.android.tungsten.setupwraith` para o usuário 0. Neste firmware,
-a atividade de recuperação do segundo pacote interfere no botão Home quando
-o Google TV é desativado. Esse pacote também contém funções de configuração
-e vinculação de contas; reabilite-o antes de usar essas funções.
-Aguarda a transição do firmware e verifica novamente a resolução da Home.
-O launcher original permanece instalado e pode ser reabilitado pelo script de restauração.
-Os demais aplicativos e serviços permanecem habilitados.
-Na primeira instalação, confira a tela e a navegação com o controle remoto.
+The script builds the launcher, verifies the transfer and installation, opens the launcher,
+and checks which activity handles Home. If the firmware still prioritizes Google TV,
+it disables `com.google.android.apps.tv.launcherx` and
+`com.google.android.tungsten.setupwraith` for user 0. On this firmware,
+the recovery activity in the second package interferes with the Home button when
+Google TV is disabled. This package also provides setup and account-linking features;
+re-enable it before using those features.
+The script waits for the firmware transition and checks the Home handler again.
+The original launcher remains installed and can be re-enabled with the restore script.
+Other apps and services remain enabled.
+On the first installation, check the screen and remote-control navigation.
 
-## Voltar ao Google TV
+## Restore Google TV
 
 ```bash
 TV_HOST=192.168.5.162 bash examples/tcl-c6k/restore.sh
 ```
 
-O script reabilita o assistente de configuração e o launcher original, define sua atividade como tela inicial
-e abre a Home. O novo launcher continua instalado para uso posterior.
+The script re-enables the setup assistant and original launcher, sets its activity as the
+Home handler, and opens Home. The custom launcher remains installed for future use.
 
-## Verificação na TV
+## On-device verification
 
-Compilação e instalação verificadas, incluindo a integridade da transferência.
-Os sete aplicativos da primeira linha abriram pelo dock e retornaram à tela
-inicial pelo botão Home. A grade e o menu de entradas foram conferidos por
-capturas de tela. Os oito aplicativos informados permanecem habilitados.
-A restauração ao Google TV também foi executada e verificada antes de
-reaplicar o launcher personalizado pelo script de instalação.
+Build and installation were verified, including transfer integrity.
+All seven apps in the first row opened from the dock and returned to Home with the Home button.
+The grid and input menu were checked through screenshots. All eight specified apps remain enabled.
+Restoring Google TV was also tested before reapplying the custom launcher with the installation script.
+The PS5 shortcut was verified to open HDMI 1. Physical cable disconnection has not been tested.
 
-## Arquivos locais
+## Local files
 
-O inventário anterior às alterações está em `backup/tcl-c6k/baseline.txt`.
-As capturas e o ambiente de compilação ficam em `backup/`, ignorado pelo Git.
-O inventário pode conter identificadores do aparelho e dados da rede; mantenha-o local.
+The inventory captured before changes is stored in `backup/tcl-c6k/baseline.txt`.
+Screenshots and the build environment are under `backup/`, which Git ignores.
+The inventory may contain device identifiers and network details; keep it local.
 
-## Alterar o visual
+## Change the appearance
 
-Para trocar a ordem do dock, edite `dock_apps` no arquivo de configuração e
-recompile. O fundo azul é definido em `launcher/app/src/main/res/drawable/home_background.xml`; não
-há seletor de papel de parede na interface.
+To change the dock order, edit `dock_apps` in the configuration file and rebuild.
+The blue background is defined in `launcher/app/src/main/res/drawable/home_background.xml`;
+the interface does not include a wallpaper picker.

@@ -340,9 +340,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void updateGreeting() {
         Calendar now = Calendar.getInstance();
-        Locale portuguese = new Locale("pt", "BR");
-        String date = new SimpleDateFormat("EEEE d 'de' MMMM yyyy", portuguese).format(now.getTime());
-        date = date.substring(0, 1).toUpperCase(portuguese) + date.substring(1);
+        String date = new SimpleDateFormat("EEEE d MMMM yyyy", Locale.ENGLISH).format(now.getTime());
         ((TextView) findViewById(R.id.currentDate)).setText(date);
         int hour = now.get(Calendar.HOUR_OF_DAY);
         int res;
