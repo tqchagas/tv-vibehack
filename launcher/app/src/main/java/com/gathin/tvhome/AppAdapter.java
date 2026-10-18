@@ -9,10 +9,16 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.content.res.ColorStateList;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.media.tv.TvContract;
+import android.media.tv.TvInputInfo;
+import android.media.tv.TvInputManager;
+import java.util.Locale;
+import java.util.Objects;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -53,14 +59,24 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         final String pkg;
         final Drawable banner;
         final Drawable icon;
+        final String inputId;
         int ambient;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
+            this.inputId = null;
             this.label = label;
             this.component = component;
             this.pkg = component.getPackageName();
             this.banner = banner;
             this.icon = icon;
+        }
+        Entry(String inputId, Drawable icon) {
+            this.label = "PS5";
+            this.component = null;
+            this.pkg = "";
+            this.banner = null;
+            this.icon = icon;
+            this.inputId = inputId;
         }
     }
 
@@ -88,6 +104,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         Intent probe = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         List<ResolveInfo> found = pm.queryIntentActivities(probe, 0);
         List<Entry> fresh = new ArrayList<>();
+        String liveTvPkg = ctx.getString(R.string.live_tv_package).trim();
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
@@ -95,7 +112,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             Drawable banner = ri.activityInfo.loadBanner(pm);
             if (banner == null) banner = ri.activityInfo.applicationInfo.loadBanner(pm);
             Drawable icon = ri.loadIcon(pm);
-            String label = String.valueOf(ri.loadLabel(pm));
+            boolean liveTv = pkg.equals(liveTvPkg);
+            if (liveTv) banner = null;
+            if (liveTv) icon = ctx.getDrawable(R.drawable.ic_livetv);
+            String label = liveTv ? ctx.getString(R.string.live_tv) : String.valueOf(ri.loadLabel(pm));
             fresh.add(new Entry(label, new ComponentName(pkg, ri.activityInfo.name), banner, icon));
         }
         Collections.sort(fresh, (a, b) -> {
@@ -107,6 +127,31 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             }
             return a.label.compareToIgnoreCase(b.label);
         });
+        TvInputManager inputs = (TvInputManager) ctx.getSystemService(Context.TV_INPUT_SERVICE);
+        if (inputs != null) {
+            String configuredId = ctx.getString(R.string.ps5_input_id);
+            for (TvInputInfo input : inputs.getTvInputList()) {
+                if (input.getType() != TvInputInfo.TYPE_HDMI || !input.isPassthroughInput()) continue;
+                String label = String.valueOf(input.loadLabel(ctx)).toLowerCase(Locale.ROOT);
+                boolean ps5 = input.getId().equals(configuredId)
+                        || label.contains("playstation 5") || label.contains("ps5");
+                if (!ps5 || inputs.getInputState(input.getId()) == TvInputManager.INPUT_STATE_DISCONNECTED) continue;
+                int insert = Math.min(dockSize, fresh.size());
+                for (int n = 0; n < fresh.size(); n++) {
+                    if (fresh.get(n).pkg.equals(liveTvPkg)) { insert = n + 1; break; }
+                }
+                fresh.add(insert, new Entry(input.getId(), ctx.getDrawable(R.drawable.ic_gamepad)));
+                break;
+            }
+        }
+        // Input callbacks may repeat; retain focus when the visible entries are unchanged.
+        boolean unchanged = fresh.size() == items.size();
+        for (int n = 0; unchanged && n < fresh.size(); n++) {
+            Entry a = fresh.get(n), b = items.get(n);
+            unchanged = Objects.equals(a.component, b.component)
+                    && Objects.equals(a.inputId, b.inputId) && a.label.equals(b.label);
+        }
+        if (unchanged) return;
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
@@ -123,10 +168,23 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     public void onBindViewHolder(@NonNull Holder h, int position) {
         Entry e = items.get(position);
         h.name.setText(e.label);
-        h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        h.name.setVisibility(View.VISIBLE);
         h.name.setAlpha(0f);
         h.card.setScaleX(1f);
         h.card.setScaleY(1f);
+        boolean liveTv = e.pkg.equals(ctx.getString(R.string.live_tv_package).trim());
+        boolean ps5 = e.inputId != null;
+        boolean sportzx = e.pkg.equals("com.sportzx.live");
+        h.card.setContentDescription(e.label);
+        h.card.setBackgroundResource(ps5 ? R.drawable.tile_ps5
+                : liveTv ? R.drawable.tile_live_tv
+                : sportzx ? R.drawable.tile_sportzx : R.drawable.tile_bg);
+        h.icon.setImageTintList(ColorStateList.valueOf(ps5 ? 0xFF172D47 : Color.WHITE));
+        h.label.setTextColor(ps5 ? 0xFF172D47 : Color.WHITE);
+        // Fit square artwork within landscape cards without cropping the brand.
+        h.banner.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int inset = sportzx ? (int) (8 * ctx.getResources().getDisplayMetrics().density) : 0;
+        h.banner.setPadding(inset, inset, inset, inset);
         if (e.banner != null) {
             h.banner.setImageDrawable(e.banner);
             h.banner.setVisibility(View.VISIBLE);
@@ -141,7 +199,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.label.setVisibility(View.VISIBLE);
         }
         h.card.setOnClickListener(v -> launch(e));
-        h.card.setOnLongClickListener(v -> {
+        h.card.setOnLongClickListener(e.inputId != null ? null : v -> {
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
@@ -153,10 +211,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     private void launch(Entry e) {
-        Intent i = new Intent(Intent.ACTION_MAIN)
+        Intent i = e.inputId != null
+                ? new Intent(Intent.ACTION_VIEW).setDataAndType(
+                        TvContract.buildChannelUriForPassthroughInput(e.inputId),
+                        "vnd.android.cursor.item/channel")
+                : new Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                 .setComponent(e.component)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             ctx.startActivity(i);
         } catch (Exception ex) {
@@ -239,7 +302,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             name = v.findViewById(R.id.name);
 
             final float density = v.getResources().getDisplayMetrics().density;
-            final float radius = density * 16f;
+            final float radius = density * 9f;
             card.setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline outline) {

@@ -5,23 +5,44 @@
 -->
 <resources>
 
-    <!-- Apps pinned to the dock row at the bottom, in this order. Missing apps are skipped. -->
+    <!-- Apps pinned to the first dock row, in this order. Missing apps are skipped. -->
     <string-array name="dock_apps">
+        <item>com.google.android.youtube.tv</item>
+        <item>com.stremio.one</item>
+        <item>com.world.youcinetv</item>
+        <item>com.sportzx.live</item>
         <item>com.netflix.ninja</item>
         <item>com.amazon.amazonvideo.livingroom</item>
-        <item>com.google.android.youtube.tv</item>
-        <item>in.startv.hotstar</item>
+        <item>com.wbd.stream</item>
+        <item>com.tcl.tv</item>
     </string-array>
 
-    <!-- Apps never shown as tiles (e.g. the Live TV app, which the Inputs menu already covers). -->
+    <!-- Apps never shown as tiles. -->
     <string-array name="hidden_apps">
-        <item>com.mediatek.wwtv.tvcenter</item>
-        <item>com.mitv.gallery</item>
+        <item>com.android.tv.settings</item>
+        <item>com.google.android.youtube.tvmusic</item>
+        <item>com.tcl.ocean.instructions</item>
+        <item>com.tcl.suspension</item>
+        <item>com.tcl.t_solo</item>
+        <item>com.tcl.dashboard</item>
+        <item>com.tcl.exhibit</item>
+        <item>com.tcl.gallery</item>
+        <item>com.tcl.guard</item>
+        <item>com.tcl.magiconnectfree</item>
+        <item>com.tcl.smartalexa</item>
+        <item>com.tcl.ui_mediaCenter</item>
+        <item>com.tcl.waterfall.overseas</item>
+        <item>com.esaba.downloader</item>
+        <item>com.google.android.play.games</item>
+        <item>com.google.android.videos</item>
     </string-array>
 
     <!-- The TV's Live TV / tuner app, offered at the end of the Inputs menu. Leave empty to omit. -->
-    <string name="live_tv_package" translatable="false">com.mediatek.wwtv.tvcenter</string>
+    <string name="live_tv_package" translatable="false">com.tcl.tv</string>
+
+    <!-- PS5 CEC input observed on HDMI 1. Update if the console is moved. -->
+    <string name="ps5_input_id" translatable="false">com.tcl.tvinput/.TvPassThroughService/HDMI100004</string>
 
     <!-- Tiles per row in the grid; the dock always has this many slots. -->
-    <integer name="columns">4</integer>
+    <integer name="columns">7</integer>
 </resources>
