@@ -65,8 +65,11 @@ The inventory may contain device identifiers and network details; keep it local.
 ## Change the appearance
 
 To change the dock order, edit `dock_apps` in the configuration file and rebuild.
-Use **Wallpaper** in the top bar to choose Hokusai's *The Great Wave* or
-Van Gogh's *Wheat Field with Cypresses*. Both paintings are bundled locally and static.
+Use **Wallpaper** in the top bar to switch between the bundled paintings and a custom image
+included during installation. To include your own JPG, PNG, or WebP from the computer, set
+`TV_WALLPAPER=/absolute/path/to/image.jpg` before running the install script. It is bundled into
+the APK, transferred to the TV over ADB, and selected on first launch. To replace it later, rerun
+the installer with a different image path.
 The choice is saved; old animated or blue background selections migrate to Hokusai.
 Artwork credits and source links are in `launcher/WALLPAPER-CREDITS.md`.
 

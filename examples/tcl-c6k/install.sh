@@ -8,6 +8,26 @@ cd "$(dirname "$0")/../.."
 export PATH="$JAVA_HOME/bin:$PATH"
 PY=tools/venv/bin/python3.13
 [ -x "$PY" ] || PY=tools/venv/bin/python
+
+wallpaper_resource=""
+cleanup_wallpaper() {
+    if [[ -n "$wallpaper_resource" ]]; then rm -f "$wallpaper_resource"; fi
+}
+trap cleanup_wallpaper EXIT
+if [[ -n "${TV_WALLPAPER:-}" ]]; then
+    [[ -f "$TV_WALLPAPER" ]] || { echo "TV_WALLPAPER is not a file: $TV_WALLPAPER" >&2; exit 1; }
+    case "${TV_WALLPAPER##*.}" in
+        jpg|JPG|jpeg|JPEG) extension=jpg ;;
+        png|PNG) extension=png ;;
+        webp|WEBP) extension=webp ;;
+        *) echo 'TV_WALLPAPER must be a JPG, PNG, or WebP image' >&2; exit 1 ;;
+    esac
+    for existing in launcher/app/src/main/res/drawable-nodpi/installer_wallpaper.*; do
+        [[ ! -e "$existing" ]] || { echo "Remove stale staged image first: $existing" >&2; exit 1; }
+    done
+    wallpaper_resource="launcher/app/src/main/res/drawable-nodpi/installer_wallpaper.$extension"
+    cp "$TV_WALLPAPER" "$wallpaper_resource"
+fi
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > launcher/local.properties
 (cd launcher && ./gradlew assembleDebug --console=plain)
 "$PY" -I tools/b64push.py launcher/app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/tvhome.apk
@@ -15,7 +35,11 @@ result=$("$PY" -I tools/tv.py 'pm install -r /data/local/tmp/tvhome.apk')
 printf '%s\n' "$result"
 [[ "$result" == *Success* ]] || exit 1
 "$PY" -I tools/tv.py 'pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION'
-"$PY" -I tools/tv.py 'am start -n com.gathin.tvhome/.MainActivity'
+if [[ -n "${TV_WALLPAPER:-}" ]]; then
+    "$PY" -I tools/tv.py 'am start -n com.gathin.tvhome/.MainActivity --ez select_installer_wallpaper true'
+else
+    "$PY" -I tools/tv.py 'am start -n com.gathin.tvhome/.MainActivity'
+fi
 "$PY" -I tools/tv.py 'cmd package set-home-activity --user 0 com.gathin.tvhome/.MainActivity'
 result=$("$PY" -I tools/tv.py 'cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME')
 printf '%s\n' "$result"

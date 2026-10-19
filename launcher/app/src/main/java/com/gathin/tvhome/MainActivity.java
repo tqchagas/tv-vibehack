@@ -6,6 +6,9 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -48,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+import java.io.IOException;
 
 /**
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
@@ -76,6 +80,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView heroName;
     private GradientDrawable ambientGlow;
     private int ambientColor;
+    private Bitmap installerWallpaperBitmap;
     private boolean heroShown;
     private TextView greeting;
     private TextView btnWifi;
@@ -104,6 +109,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         COLUMNS = Math.max(1, getResources().getInteger(R.integer.columns));
         liveTvPkg = getString(R.string.live_tv_package).trim();
+
+        selectInstallerWallpaperFrom(getIntent());
 
         root = findViewById(R.id.root);
         root.setFocusableInTouchMode(true);
@@ -210,6 +217,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onPause();
         handler.removeCallbacks(minuteTick);
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (selectInstallerWallpaperFrom(intent)) applyWallpaper();
+    }
+
+    private boolean selectInstallerWallpaperFrom(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra("select_installer_wallpaper", false)
+                || installerWallpaperResource() == 0) return false;
+        getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", INSTALLER_WALLPAPER).apply();
+        intent.removeExtra("select_installer_wallpaper");
+        return true;
     }
 
     @Override
@@ -540,10 +562,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private static final int[] WALLPAPERS = {0, R.drawable.wallpaper_wave, R.drawable.wallpaper_van_gogh};
+    private static final int INSTALLER_WALLPAPER = WALLPAPERS.length;
+    private static final int WALLPAPER_MAX_WIDTH = 1920;
+    private static final int WALLPAPER_MAX_HEIGHT = 1080;
+
+    private int installerWallpaperResource() {
+        return getResources().getIdentifier("installer_wallpaper", "drawable", getPackageName());
+    }
 
     private int wallpaperChoice() {
         int choice = getPreferences(MODE_PRIVATE).getInt("wallpaper", 1);
         if (choice > 0 && choice < WALLPAPERS.length) return choice;
+        if (choice == INSTALLER_WALLPAPER && installerWallpaperResource() != 0) return choice;
         getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", 1).apply();
         return 1;
     }
@@ -551,16 +581,57 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void applyWallpaper() {
         int choice = wallpaperChoice();
         ImageView wallpaper = findViewById(R.id.wallpaper);
-        wallpaper.setImageResource(WALLPAPERS[choice]);
+        if (choice == INSTALLER_WALLPAPER) {
+            try {
+                if (installerWallpaperBitmap == null) installerWallpaperBitmap = decodeInstallerWallpaper();
+                wallpaper.setImageBitmap(installerWallpaperBitmap);
+            } catch (IOException | RuntimeException e) {
+                wallpaper.setImageResource(WALLPAPERS[1]);
+            }
+        } else wallpaper.setImageResource(WALLPAPERS[choice]);
         wallpaper.setVisibility(choice == 0 ? View.GONE : View.VISIBLE);
         View shade = findViewById(R.id.wallpaperShade);
         shade.setVisibility(choice == 0 ? View.GONE : View.VISIBLE);
     }
 
+    private Bitmap decodeInstallerWallpaper() throws IOException {
+        int resource = installerWallpaperResource();
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            ImageDecoder.Source source = ImageDecoder.createSource(getResources(), resource);
+            return ImageDecoder.decodeBitmap(source, (decoder, info, src) -> {
+                int width = info.getSize().getWidth();
+                int height = info.getSize().getHeight();
+                float scale = Math.min(1f, Math.min(WALLPAPER_MAX_WIDTH / (float) width,
+                        WALLPAPER_MAX_HEIGHT / (float) height));
+                decoder.setTargetSize(Math.max(1, Math.round(width * scale)),
+                        Math.max(1, Math.round(height * scale)));
+                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+            });
+        }
+
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeResource(getResources(), resource, bounds);
+        int sample = 1;
+        while (bounds.outWidth / sample > WALLPAPER_MAX_WIDTH
+                || bounds.outHeight / sample > WALLPAPER_MAX_HEIGHT) sample *= 2;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        Bitmap bitmap = BitmapFactory.decodeResource(getResources(), resource, options);
+        if (bitmap == null) throw new IOException("Could not decode installer wallpaper");
+        return bitmap;
+    }
+
     private void showWallpaperPicker() {
+        String[] bundled = getResources().getStringArray(R.array.wallpaper_choices);
+        boolean hasInstallerWallpaper = installerWallpaperResource() != 0;
+        String[] choices = new String[bundled.length + (hasInstallerWallpaper ? 1 : 0)];
+        System.arraycopy(bundled, 0, choices, 0, bundled.length);
+        if (hasInstallerWallpaper) choices[bundled.length] = getString(R.string.installed_custom_wallpaper);
+        int selected = wallpaperChoice() - 1;
         new AlertDialog.Builder(this)
                 .setTitle(R.string.wallpaper_title)
-                .setSingleChoiceItems(R.array.wallpaper_choices, wallpaperChoice() - 1, (dialog, which) -> {
+                .setSingleChoiceItems(choices, selected, (dialog, which) -> {
                     getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", which + 1).apply();
                     applyWallpaper();
                     dialog.dismiss();

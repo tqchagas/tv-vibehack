@@ -1,107 +1,125 @@
-# tv-vibehack
+# TV Vibe Hack
 
-**Your TV, minus the ads.** Debloat any Android TV / Google TV over ADB and give it a clean,
-tvOS-inspired launcher. Hand the prompt to Claude Code or any coding assistant, answer a few
-questions about which apps you use, and it does the rest on the real TV.
+A clean home screen for Android TV and Google TV. This repo contains the launcher, setup scripts,
+and the configuration we tested on a **TCL C6K (G08), Android 14**.
 
-| Stock home screen | After |
+## The TV after setup
+
+These are screenshots captured from the configured TV. The launcher interface is in English.
+
+| Home screen | App grid |
 |---|---|
-| ![Stock Google TV home with a sponsored ad](docs/stock-home.jpg) | ![tvOS-style launcher](docs/new-home.jpg) |
+| ![TCL C6K home screen with the streaming app dock](docs/tcl-c6k-home.png) | ![TCL C6K app grid with focused YouTube tile](docs/tcl-c6k-grid.png) |
 
-Everything is reversible: packages are disabled, never uninstalled, and a restore script puts the
-stock launcher back.
+The dock contains YouTube, Stremio, YouCine, SportzX, Netflix, Prime Video, and HBO Max. The next
+row includes Globoplay, Play Store, Live TV, and the PS5 HDMI input when connected. The **Inputs**
+menu switches HDMI sources and opens Live TV:
 
-## Quick start
+![Inputs menu showing HDMI ports and Live TV](docs/tcl-c6k-inputs.png)
 
-1. On the TV: Settings → Device Preferences → About → press OK on **Build** seven times → back →
-   Developer options → turn on **USB debugging** (and Network/ADB debugging if your TV shows it).
-   Keep the TV on and on the same Wi-Fi as your computer.
-2. Open Claude Code (or your assistant of choice) on your computer and paste the prompt from
-   [`PROMPT.md`](PROMPT.md), filling in your TV model.
-3. Accept the "Allow USB debugging?" prompt on the TV when told to, then answer the checklist
-   questions (which apps you use, which four go in the dock).
+The launcher has a selectable artwork background, clock, network and settings shortcuts, and
+remote-control navigation. Choose a bundled painting or include your own image in the install
+command below. A custom image is sent to the TV inside the APK and selected on first launch. The
+launcher keeps the selected app focused when Android refreshes the available TV inputs. Streaming
+apps remain installed. On this TCL, setup disables the original Google TV launcher and its setup
+assistant so the new home screen opens with the Home button. Both can be restored.
 
-That's it. The assistant backs up, debloats, builds and installs the launcher, and verifies each
-step with screenshots from the TV. If you'd rather do it by hand, the pieces are below.
+## Install on the tested TCL C6K
 
-## What's in the repo
+1. Clone this repo to a computer on the same network as the TV:
 
-| Path | What it is |
-|---|---|
-| [`PROMPT.md`](PROMPT.md) | The prompt. Brand-neutral; the assistant discovers your TV's bloat. |
-| [`launcher/`](launcher/) | The tvOS-style launcher. Edit `app/src/main/res/values/config.xml` for your dock, hidden apps and Live TV package, then run `build-and-install.sh`. |
-| [`tools/tv.py`](tools/tv.py) | Pure-Python ADB client (shell, batch, push, pull). Works where the stock `adb` is blocked. |
-| [`tools/b64push.py`](tools/b64push.py) | Uploads larger files (APKs) as base64 chunks with an md5 check. |
-| [`tools/disable.sh`](tools/disable.sh), [`tools/restore.sh`](tools/restore.sh) | Apply or undo a debloat list. |
-| [`examples/`](examples/) | Per-TV debloat lists. Add yours, see [CONTRIBUTING.md](CONTRIBUTING.md). |
+   ```bash
+   git clone https://github.com/tqchagas/tv-vibehack.git
+   cd tv-vibehack
+   ```
 
-## The launcher
+2. On the TV, enable Developer options and network ADB. Find its IP in Network settings, keep it
+   on, and accept the ADB authorization prompt if it appears.
+3. Install Python 3.13, JDK 17, and the Android SDK. The launcher needs SDK platform 34 and
+   build-tools 34.0.0; if needed, add them with
+   `sdkmanager "platforms;android-34" "build-tools;34.0.0"`.
+4. Optional: put a JPG, PNG, or WebP wallpaper file on the computer. `TV_WALLPAPER` below is the
+   path on the computer; the installer transfers it to the TV over ADB.
 
-A small native Android TV home screen (`com.gathin.tvhome`), built for sets with 1 GB of RAM:
-
-- Pitch-black background, like Apple TV 4K.
-- A dock at the bottom in a lighter rounded band with the four apps you choose. The shelf above
-  shows the focused dock app's name in large type with an ambient glow sampled from its banner.
-  Press Down and the dock slides up to reveal the rest of your apps in a grid.
-- One translucent glass highlight springs from tile to tile. The focused tile lifts and shows its
-  name.
-- Frosted pills top right: **Inputs** (a dropdown of HDMI ports, AV and Live TV), **Wi-Fi**
-  (shows the network name) and **Settings**. Greeting, a large thin clock and the date top left,
-  set in [Outfit](https://fonts.google.com/specimen/Outfit).
-- Deterministic D-pad navigation, last focused tile remembered, staggered entrance animation.
-  No blur, no video, no network, no background services.
-
-Configure it in [`launcher/app/src/main/res/values/config.xml`](launcher/app/src/main/res/values/config.xml):
-dock order, hidden apps, Live TV package and columns. Build and install with
+Then, from the repository directory:
 
 ```bash
-TV_HOST=192.168.1.50 launcher/build-and-install.sh
+python3.13 -m venv tools/venv
+tools/venv/bin/python -m pip install -r tools/requirements.txt
+
+export TV_HOST="192.168.1.50"       # replace with the TV's IP
+export JAVA_HOME="/path/to/jdk-17"
+export ANDROID_HOME="/path/to/android-sdk"
+# Optional: uncomment and replace with an image path on this computer
+# export TV_WALLPAPER="/absolute/path/to/my-wallpaper.jpg"
+bash examples/tcl-c6k/install.sh
 ```
 
-Needs JDK 17 and the Android SDK (platform 34, build-tools 34.0.0). On macOS:
-`brew install openjdk@17 android-commandlinetools && sdkmanager "platforms;android-34" "build-tools;34.0.0"`.
+On a fresh install, leaving out `TV_WALLPAPER` uses the bundled Hokusai wallpaper. With it set,
+the installer puts your image in the app before building, transfers it over ADB, and selects it
+automatically. The Wallpaper menu will also let you switch between your image and the included
+paintings. To change it later, set `TV_WALLPAPER` to a different file and run the install command
+again.
+
+The script builds the launcher, installs it, sets it as Home, and verifies the change. It is
+configured for the tested TCL firmware; **do not use this TCL installer on another TV**. For a
+different Android TV or Google TV, start with [PROMPT.md](PROMPT.md) and adapt the model-specific
+package settings first. Samsung Tizen, LG webOS, and Fire TV are not supported by this Android
+launcher.
+
+## Restore the original Google TV home
+
+Run this from the repository directory, using the same TV IP:
+
+```bash
+TV_HOST="192.168.1.50" bash examples/tcl-c6k/restore.sh
+```
+
+This re-enables the original launcher and setup assistant, and returns the Home button to Google
+TV. The custom launcher stays installed.
 
 ## Talking to the TV by hand
 
+Set up the Python ADB client once, then point it at the TV's IP. On the TCL C6K, enable Developer
+options and network ADB first, and accept the authorization prompt on the TV:
+
 ```bash
-python3 -m venv tools/venv && tools/venv/bin/pip install -r tools/requirements.txt
-export TV_HOST=192.168.1.50                                   # your TV's IP
-tools/venv/bin/python -I tools/tv.py --probe                 # model, Android version, firmware
-tools/venv/bin/python -I tools/tv.py 'pm list packages'      # one command
-printf 'cmd1\ncmd2\n' | tools/venv/bin/python -I tools/tv.py --batch
-tools/disable.sh examples/xiaomi-mi-tv-4a/debloat.txt        # apply a list
-tools/restore.sh examples/xiaomi-mi-tv-4a/debloat.txt        # undo it, restore stock launcher
+python3.13 -m venv tools/venv
+tools/venv/bin/python -m pip install -r tools/requirements.txt
+export TV_HOST="192.168.1.50"       # replace with the TV's IP
+tools/venv/bin/python -I tools/tv.py --probe
+tools/venv/bin/python -I tools/tv.py 'pm list packages'
 ```
 
-### Gotchas we hit
+For the **TCL C6K (G08)**, use the model-specific scripts to install or restore the launcher:
 
-- **macOS: `adb connect` says "No route to host"** while the port is clearly open. Recent macOS
-  treats the Google-signed `adb` as its own app under Local Network privacy and silently blocks it.
-  `tools/tv.py` avoids the binary entirely.
-- **No "wireless debugging" toggle** on some TVs (Xiaomi among them). USB debugging alone opens
-  network ADB on port 5555.
-- **Chained `pm` commands** (`pm disable a; pm disable b`) may silently stop after the first. Run
-  one per shell call; `--batch` does this.
-- **Large pushes hang** through the Python client. Use `tools/b64push.py` for APKs.
-- **Disable the stock launcher only after the new one is installed**, or the Home button lands on
-  a factory test app.
-- **Third-party launchers** often charge for basics like a custom wallpaper. Hence `launcher/`.
-- **No on-screen keyboard** after switching launchers (seen on Xiaomi): the default input method
-  pointed at a Baidu IME that isn't installed. Fix with
-  `tools/tv.py 'ime set com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'`.
+```bash
+export JAVA_HOME="/path/to/jdk-17"
+export ANDROID_HOME="/path/to/android-sdk"
+bash examples/tcl-c6k/install.sh
+bash examples/tcl-c6k/restore.sh
+```
 
-## Supported TVs
+For the **Xiaomi Mi TV 4A**, the example currently contains a debloat list:
 
-Anything running Android TV or Google TV: Xiaomi/Redmi, TCL, Hisense, Sony, OnePlus, Realme,
-Nvidia Shield and most others. Not Samsung Tizen, LG webOS or Amazon Fire TV (different OS, no ADB
-launcher replacement). Tested so far on the models in [`examples/`](examples/).
+```bash
+tools/disable.sh examples/xiaomi-mi-tv-4a/debloat.txt
+tools/restore.sh examples/xiaomi-mi-tv-4a/debloat.txt
+```
 
-## Contributing
+## Customize
 
-Add your TV's debloat list, improve the launcher, or sharpen the prompt. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+- Change dock order, hidden app tiles, Live TV, or grid columns in
+  [`launcher/app/src/main/res/values/config.xml`](launcher/app/src/main/res/values/config.xml).
+- Choose a personal image in the launcher's **Wallpaper** menu, or change the bundled artwork.
+  Image credits are in
+  [`launcher/WALLPAPER-CREDITS.md`](launcher/WALLPAPER-CREDITS.md).
+- Rebuild and reinstall with the TCL script above.
 
-## Licence
+The scripts and app code are in [`launcher/`](launcher/), the tested TCL setup is in
+[`examples/tcl-c6k/`](examples/tcl-c6k/), and the assistant workflow for adapting another TV is in
+[`PROMPT.md`](PROMPT.md).
 
-MIT, see [`LICENSE`](LICENSE). The Outfit typeface is under the SIL Open Font License, see
-`launcher/FONT-LICENSE-OFL.txt`.
+## License
+
+MIT. See [LICENSE](LICENSE). The Outfit typeface uses the SIL Open Font License.

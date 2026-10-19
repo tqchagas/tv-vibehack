@@ -22,6 +22,7 @@
     <string name="offline">Offline</string>
     <string name="wallpaper">Wallpaper</string>
     <string name="wallpaper_title">Choose wallpaper</string>
+    <string name="installed_custom_wallpaper">Custom image from installer</string>
     <string name="close">Close</string>
     <string-array name="wallpaper_choices">
         <item>Hokusai — The Great Wave</item>
