@@ -166,9 +166,51 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     && a.label.equals(b.label);
         }
         if (unchanged) return;
+
+        // Input callbacks can refresh this list shortly after the launcher opens. A full
+        // adapter refresh detaches the focused card on some TV builds, leaving DPAD with
+        // no focused target. Remember the focused entry and restore it after layout.
+        Entry focusedEntry = null;
+        RecyclerView recycler = null;
+        if (ctx instanceof android.app.Activity) {
+            android.view.View focused = ((android.app.Activity) ctx).getCurrentFocus();
+            if (focused != null && focused.getId() == R.id.card) {
+                RecyclerView.ViewHolder holder = null;
+                android.view.ViewParent parent = focused.getParent();
+                while (parent != null && !(parent instanceof RecyclerView)) parent = parent.getParent();
+                if (parent instanceof RecyclerView) {
+                    recycler = (RecyclerView) parent;
+                    holder = recycler.findContainingViewHolder(focused);
+                }
+                if (holder != null) {
+                    int pos = holder.getBindingAdapterPosition();
+                    if (pos >= 0 && pos < items.size()) focusedEntry = items.get(pos);
+                }
+            }
+        }
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
+        if (focusedEntry != null && recycler != null) {
+            final RecyclerView targetRecycler = recycler;
+            final Entry targetEntry = focusedEntry;
+            targetRecycler.post(() -> {
+                int target = -1;
+                for (int i = 0; i < items.size(); i++) {
+                    Entry item = items.get(i);
+                    if (Objects.equals(item.component, targetEntry.component)
+                            && Objects.equals(item.inputId, targetEntry.inputId)
+                            && item.liveTvInput == targetEntry.liveTvInput) {
+                        target = i;
+                        break;
+                    }
+                }
+                if (target < 0) return;
+                RecyclerView.ViewHolder holder = targetRecycler.findViewHolderForAdapterPosition(target);
+                if (holder != null) holder.itemView.findViewById(R.id.card).requestFocus();
+                else targetRecycler.scrollToPosition(target);
+            });
+        }
     }
 
     @NonNull
